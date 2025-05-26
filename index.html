@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Monitoring Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .sensor-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        
+        .sensor-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .temperature { color: #ff6b6b; }
+        .humidity { color: #4ecdc4; }
+        .distance { color: #45b7d1; }
+        
+        .unit {
+            font-size: 0.6em;
+            color: #666;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        
+        .online {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .offline {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .chart {
+            width: 100%;
+            height: 300px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background: #5a6fd8;
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .last-update {
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌡️ IoT Monitoring Dashboard</h1>
+            <p>Real-time monitoring JSN-SR04T & DHT21</p>
+        </div>
+        
+        <div class="controls">
+            <button id="startBtn" onclick="startMonitoring()">Start Monitoring</button>
+            <button id="stopBtn" onclick="stopMonitoring()" disabled>Stop Monitoring</button>
+            <button onclick="clearData()">Clear Data</button>
+        </div>
+        
+        <div class="sensor-cards">
+            <div class="card">
+                <h3>🌡️ Suhu (DHT21)</h3>
+                <div class="sensor-value temperature" id="temperature">--<span class="unit">°C</span></div>
+                <div class="status online" id="tempStatus">Connecting...</div>
+            </div>
+            
+            <div class="card">
+                <h3>💧 Kelembaban (DHT21)</h3>
+                <div class="sensor-value humidity" id="humidity">--<span class="unit">%</span></div>
+                <div class="status online" id="humidStatus">Connecting...</div>
+            </div>
+            
+            <div class="card">
+                <h3>📏 Jarak (JSN-SR04T)</h3>
+                <div class="sensor-value distance" id="distance">--<span class="unit">cm</span></div>
+                <div class="status online" id="distStatus">Connecting...</div>
+            </div>
+        </div>
+        
+        <div class="chart-container">
+            <h3>📊 Real-time Chart</h3>
+            <div class="chart" id="chart">
+                Chart akan muncul di sini setelah monitoring dimulai
+            </div>
+        </div>
+        
+        <div class="last-update" id="lastUpdate">
+            Last update: --
+        </div>
+    </div>
+
+    <script>
+        let isMonitoring = false;
+        let monitoringInterval;
+        let dataHistory = {
+            temperature: [],
+            humidity: [],
+            distance: [],
+            timestamps: []
+        };
+        
+        // Simulasi data dari sensor (dalam implementasi nyata, ini akan diganti dengan API call ke ESP32/Arduino)
+        function generateSensorData() {
+            return {
+                temperature: (20 + Math.random() * 15).toFixed(1), // 20-35°C
+                humidity: (40 + Math.random() * 40).toFixed(1),    // 40-80%
+                distance: (5 + Math.random() * 395).toFixed(1),    // 5-400cm
+                timestamp: new Date()
+            };
+        }
+        
+        // Fungsi untuk mengambil data dari sensor (simulasi)
+        // Dalam implementasi nyata, ganti dengan fetch ke ESP32/Arduino
+       async function fetchSensorData() {
+    try {
+        const response = await fetch('http://IP_ESP32/sensor-data');
+        const data = await response.json();
+        
+        return {
+            success: true,
+            data: {
+                temperature: data.temperature.toFixed(1),
+                humidity: data.humidity.toFixed(1),
+                distance: data.distance.toFixed(1),
+                timestamp: new Date()
+            }
+        };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+        
+        // Update display dengan data sensor
+        function updateDisplay(data) {
+            document.getElementById('temperature').innerHTML = `${data.temperature}<span class="unit">°C</span>`;
+            document.getElementById('humidity').innerHTML = `${data.humidity}<span class="unit">%</span>`;
+            document.getElementById('distance').innerHTML = `${data.distance}<span class="unit">cm</span>`;
+            
+            // Update status
+            updateStatus('tempStatus', true);
+            updateStatus('humidStatus', true);
+            updateStatus('distStatus', true);
+            
+            // Update timestamp
+            document.getElementById('lastUpdate').textContent = 
+                `Last update: ${data.timestamp.toLocaleTimeString()}`;
+            
+            // Simpan ke history
+            dataHistory.temperature.push(parseFloat(data.temperature));
+            dataHistory.humidity.push(parseFloat(data.humidity));
+            dataHistory.distance.push(parseFloat(data.distance));
+            dataHistory.timestamps.push(data.timestamp.toLocaleTimeString());
+            
+            // Batasi history (maksimal 20 data points)
+            if (dataHistory.temperature.length > 20) {
+                dataHistory.temperature.shift();
+                dataHistory.humidity.shift();
+                dataHistory.distance.shift();
+                dataHistory.timestamps.shift();
+            }
+            
+            updateChart();
+        }
+        
+        // Update status sensor
+        function updateStatus(elementId, online) {
+            const element = document.getElementById(elementId);
+            if (online) {
+                element.textContent = 'Online';
+                element.className = 'status online';
+            } else {
+                element.textContent = 'Offline';
+                element.className = 'status offline';
+            }
+        }
+        
+        // Update chart (versi sederhana dengan ASCII art)
+        function updateChart() {
+            const chartElement = document.getElementById('chart');
+            
+            if (dataHistory.temperature.length === 0) {
+                chartElement.innerHTML = 'Tidak ada data untuk ditampilkan';
+                return;
+            }
+            
+            let chartHTML = '<div style="text-align: left; font-family: monospace; font-size: 12px;">';
+            chartHTML += '<strong>Data Terakhir (10 data points):</strong><br><br>';
+            
+            const lastData = Math.min(10, dataHistory.temperature.length);
+            const startIndex = dataHistory.temperature.length - lastData;
+            
+            for (let i = startIndex; i < dataHistory.temperature.length; i++) {
+                const temp = dataHistory.temperature[i];
+                const humid = dataHistory.humidity[i];
+                const dist = dataHistory.distance[i];
+                const time = dataHistory.timestamps[i];
+                
+                chartHTML += `${time} | Temp: ${temp}°C | Humid: ${humid}% | Dist: ${dist}cm<br>`;
+            }
+            
+            chartHTML += '</div>';
+            chartElement.innerHTML = chartHTML;
+        }
+        
+        // Mulai monitoring
+        async function startMonitoring() {
+            if (isMonitoring) return;
+            
+            isMonitoring = true;
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            
+            // Update status awal
+            updateStatus('tempStatus', false);
+            updateStatus('humidStatus', false);
+            updateStatus('distStatus', false);
+            
+            // Mulai interval monitoring
+            monitoringInterval = setInterval(async () => {
+                const result = await fetchSensorData();
+                
+                if (result.success) {
+                    updateDisplay(result.data);
+                } else {
+                    console.error('Failed to fetch sensor data:', result.error);
+                    updateStatus('tempStatus', false);
+                    updateStatus('humidStatus', false);
+                    updateStatus('distStatus', false);
+                }
+            }, 2000); // Update setiap 2 detik
+            
+            // Ambil data pertama kali
+            const result = await fetchSensorData();
+            if (result.success) {
+                updateDisplay(result.data);
+            }
+        }
+        
+        // Stop monitoring
+        function stopMonitoring() {
+            if (!isMonitoring) return;
+            
+            isMonitoring = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+            }
+            
+            // Update status ke offline
+            updateStatus('tempStatus', false);
+            updateStatus('humidStatus', false);
+            updateStatus('distStatus', false);
+        }
+        
+        // Clear data
+        function clearData() {
+            dataHistory = {
+                temperature: [],
+                humidity: [],
+                distance: [],
+                timestamps: []
+            };
+            
+            document.getElementById('temperature').innerHTML = '--<span class="unit">°C</span>';
+            document.getElementById('humidity').innerHTML = '--<span class="unit">%</span>';
+            document.getElementById('distance').innerHTML = '--<span class="unit">cm</span>';
+            document.getElementById('lastUpdate').textContent = 'Last update: --';
+            
+            updateChart();
+        }
+        
+        // Auto start saat halaman dimuat
+        window.addEventListener('load', () => {
+            console.log('IoT Dashboard loaded');
+            updateChart();
+        });
+    </script>
+</body>
+</html>
